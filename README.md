@@ -40,6 +40,8 @@ Voir `AGENTS.md` pour le détail.
 
 **Rapport refactorisation** (priorités 1–3) : [RapportRefacto.md](RapportRefacto.md).
 
+**Mémoire agent** (missions précédentes) : [RapportMemoire.md](RapportMemoire.md).
+
 ## Architecture
 
 | Fichier | Rôle |

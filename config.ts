@@ -38,3 +38,15 @@ export const SKILL_MIN_SCORE = 1;
 /** Rapport fichier */
 export const NOTES_DIR = "notes";
 export const NOTES_FILE = join(NOTES_DIR, "rapport.md");
+
+/** Mémoire épisodique (missions passées) — désactiver avec AGENT_MEMORY=0 */
+export const MEMORY_ENABLED = process.env.AGENT_MEMORY !== "0";
+export const MEMORY_DIR = join(import.meta.dir, "memory", "episodes");
+/** Max missions gardées sur disque par projet — au-delà, les plus anciennes sont supprimées. */
+export const MAX_EPISODES_STORED = 20;
+/** Max missions rappelées dans le prompt (les plus récentes). */
+export const MAX_EPISODES_IN_PROMPT = 5;
+/** Résumé = extrait court de la réponse finale (pas tout l'historique). */
+export const MAX_MEMORY_SUMMARY_CHARS = 600;
+/** Texte de la mission tronqué si trop long. */
+export const MAX_MEMORY_MISSION_CHARS = 400;

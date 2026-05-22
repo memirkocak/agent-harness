@@ -4,6 +4,7 @@ import type { LoadedSkill } from "./src/skills.ts";
 export function buildSystemPrompt(
   requiresReport: boolean,
   skill: LoadedSkill | null = null,
+  memoryBlock = "",
 ): string {
   const reportBlock = requiresReport
     ? `
@@ -45,7 +46,7 @@ ${skill.skillContent}
   const toolsBlock = formatToolsForPrompt(requiresReport);
 
   return `Tu es un agent IA autonome en mode ReAct (Reason → Act → Observe).
-${skillBlock}
+${memoryBlock}${skillBlock}
 ## Méthode
 1. Raisonne étape par étape avant d'agir.
 2. Choisis l'outil adapté ou réponds directement si tu as assez d'informations.
