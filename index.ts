@@ -15,16 +15,13 @@ if (typeof Bun === "undefined") {
   process.exit(1);
 }
 
-/** Mission par défaut si aucun argument CLI. */
 const DEFAULT_MISSION = "Calcule moi 10*10.";
 
-/** Mission dynamique : bun run index.ts "Ta mission ici" */
 const mission =
   process.argv.slice(2).join(" ").trim() || DEFAULT_MISSION;
 
 const requiresReport = missionRequiresReport(mission);
 
-// Skill dynamique : détection + chargement SKILL.md → injection system prompt
 const skill = await resolveSkillForMission(mission);
 logSkillDetection(mission, skill);
 
@@ -42,7 +39,11 @@ console.log(
   `Rapport fichier : ${requiresReport ? "oui → notes/rapport.md" : "non (réponse terminal uniquement)"}\n`,
 );
 
-const history = await runAgent(messages, { requiresReport });
+const { messages: history, stopReason, turnsUsed } = await runAgent(messages, {
+  requiresReport,
+});
+
+console.log(`\n=== Fin agent (stop_reason=${stopReason}, tours=${turnsUsed}) ===`);
 
 console.log("\n=== Historique final ===");
 for (const msg of history) {

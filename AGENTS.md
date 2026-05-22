@@ -25,7 +25,9 @@ Pas de LangChain ni framework agent : boucle et outils écrits à la main.
 | `index.ts` | Entrée CLI, mission, skill, lancement |
 | `agent.ts` | Boucle ReAct (max 15 tours), `stop_reason` |
 | `llm.ts` | Client Ollama, `mapToolCalls`, outils exposés |
-| `tools.ts` | `fetch_url`, `run_js`, `save_note` |
+| `tools.ts` | `fetch_url`, `run_js`, `read_file`, `list_dir`, `save_note` |
+| `config.ts` | Constantes + `PROJECT_ROOT` / `AGENT_PROJECT_ROOT` |
+| `src/tool-registry.ts` | Schéma + exécution outils |
 | `prompt.ts` | System prompt + injection skill |
 | `mission.ts` | Détection rapport fichier demandé |
 | `src/skills.ts` | Détection + chargement skills |
@@ -40,9 +42,13 @@ Voir aussi : `docs/ARCHITECTURE.md`
 |-------|-------------|
 | `fetch_url(url)` | Récupère le texte d'une page web (max 5000 car., timeout 15s) |
 | `run_js(code)` | Exécute du JS via `Bun.spawn` (pas `eval`), timeout 30s |
+| `list_dir(path)` | Liste un dossier du projet (`AGENT_PROJECT_ROOT`) |
+| `read_file(path)` | Lit un fichier source pour audit (chemins relatifs, pas de `../`) |
 | `save_note(content)` | Écrit dans `notes/rapport.md` (si mission le demande) |
 
-Les outils sont déclarés dans `llm.ts` et exécutés via `tools.ts` → `executeTool()`.
+Les outils sont déclarés dans `src/tool-registry.ts` et exécutés via `tools.ts`.
+
+**Audit sécurité** : voir `docs/AGENT-SECURITE.md` et skill `security-audit`.
 
 ## Skills disponibles
 
@@ -50,7 +56,8 @@ Détection automatique dans `src/skills.ts` : lit les **triggers** du frontmatte
 
 | Skill | Dossier | Triggers (exemples) |
 |-------|---------|---------------------|
-| **code-review** | `skills/code-review/` | review, audit, sécurité, analyse ce code, PR |
+| **security-audit** | `skills/security-audit/` | audit sécurité, injection sql/xss, owasp, faille, durcissement |
+| **code-review** | `skills/code-review/` | review, code review, PR, refactor |
 | **tech-report** | `skills/tech-report/` | rapport, architecture, compare, documentation |
 | **data-analysis** | `skills/data-analysis/` | analyse des données, API, trends, anomalies |
 

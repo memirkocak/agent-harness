@@ -1,68 +1,21 @@
-import type { AgentOptions, LlmResponse, Message, ToolCall } from "./types.ts";
+import {
+  OLLAMA_HOST,
+  OLLAMA_MODEL,
+  OLLAMA_TIMEOUT_MS,
+} from "./config.ts";
+import { trimMessagesForLlm } from "./src/context.ts";
+import { getOllamaToolSchemas } from "./src/tool-registry.ts";
+import type {
+  AgentOptions,
+  LlmClient,
+  LlmResponse,
+  Message,
+  ToolCall,
+} from "./types.ts";
 
-const OLLAMA_HOST = process.env.OLLAMA_HOST ?? "http://localhost:11434";
+export { OLLAMA_MODEL };
+
 const OLLAMA_URL = `${OLLAMA_HOST}/api/chat`;
-/** Modèle Ollama utilisé par le harness (tool_calls). */
-export const OLLAMA_MODEL = "llama3.2";
-const OLLAMA_TIMEOUT_MS = 120_000;
-
-const CORE_TOOLS = [
-  {
-    type: "function",
-    function: {
-      name: "fetch_url",
-      description:
-        "Récupère le texte d'une page web (HTML nettoyé, max 5000 caractères). Pour rechercher des infos.",
-      parameters: {
-        type: "object",
-        properties: {
-          url: { type: "string", description: "URL https:// complète" },
-        },
-        required: ["url"],
-      },
-    },
-  },
-  {
-    type: "function",
-    function: {
-      name: "run_js",
-      description:
-        "Exécute du JavaScript via Bun. Utilise console.log pour le résultat. Calculs et tests uniquement.",
-      parameters: {
-        type: "object",
-        properties: {
-          code: { type: "string", description: "Code JS à exécuter" },
-        },
-        required: ["code"],
-      },
-    },
-  },
-] as const;
-
-const SAVE_NOTE_TOOL = {
-  type: "function",
-  function: {
-    name: "save_note",
-    description:
-      "Sauvegarde le rapport Markdown COMPLET dans notes/rapport.md. Appeler une seule fois, à la fin, après toutes les recherches — pas en parallèle avec fetch_url.",
-    parameters: {
-      type: "object",
-      properties: {
-        content: {
-          type: "string",
-          description:
-            "Markdown (# Rapport, ## Mission, ## Étapes, ## Synthèse)",
-        },
-      },
-      required: ["content"],
-    },
-  },
-} as const;
-
-/** Outils exposés à Ollama selon la mission (save_note seulement si rapport demandé). */
-function toolsForMission(requiresReport: boolean) {
-  return requiresReport ? [...CORE_TOOLS, SAVE_NOTE_TOOL] : [...CORE_TOOLS];
-}
 
 type OllamaRawToolCall = {
   id?: string;
@@ -76,10 +29,6 @@ type OllamaChatMessage = {
   tool_call_id?: string;
 };
 
-/**
- * Convertit notre historique vers le format Ollama.
- * Les messages tool réinjectent les résultats d'outils pour la phase Observe du ReAct.
- */
 function toOllamaMessages(messages: Message[]): OllamaChatMessage[] {
   return messages.map((m) => {
     if (m.role === "assistant" && m.tool_calls?.length) {
@@ -130,14 +79,16 @@ function mapToolCalls(raw: unknown): ToolCall[] {
   });
 }
 
-/**
- * Appel Ollama /api/chat avec tool_calls.
- * Retourne stop_reason tool_use (outils) ou end_turn (réponse finale).
- */
+export const ollamaClient: LlmClient = {
+  complete: llm,
+};
+
 export async function llm(
   messages: Message[],
   options: AgentOptions,
 ): Promise<LlmResponse> {
+  const trimmed = trimMessagesForLlm(messages);
+
   let res: Response;
   try {
     res = await fetch(OLLAMA_URL, {
@@ -145,8 +96,8 @@ export async function llm(
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         model: OLLAMA_MODEL,
-        messages: toOllamaMessages(messages),
-        tools: toolsForMission(options.requiresReport),
+        messages: toOllamaMessages(trimmed),
+        tools: getOllamaToolSchemas(options.requiresReport),
         stream: false,
       }),
       signal: AbortSignal.timeout(OLLAMA_TIMEOUT_MS),
@@ -178,7 +129,7 @@ export async function llm(
     const detail = data.error ?? JSON.stringify(data);
     if (res.status === 404 && String(detail).includes("not found")) {
       throw new Error(
-        `Modèle "${OLLAMA_MODEL}" introuvable. Lance : ollama pull llama3.2`,
+        `Modèle "${OLLAMA_MODEL}" introuvable. Lance : ollama pull ${OLLAMA_MODEL}`,
       );
     }
     throw new Error(`Ollama API HTTP ${res.status}: ${detail}`);

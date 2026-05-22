@@ -1,11 +1,6 @@
+import { formatToolsForPrompt } from "./src/tool-registry.ts";
 import type { LoadedSkill } from "./src/skills.ts";
 
-/**
- * Construit le system prompt : règles ReAct + outils + injection skill (PAS user).
- *
- * L'expertise SKILL.md est fusionnée ici pour que chaque tour llm() hérite
- * du même contexte spécialisé (compatible Ollama / OpenAI / tout provider chat).
- */
 export function buildSystemPrompt(
   requiresReport: boolean,
   skill: LoadedSkill | null = null,
@@ -38,11 +33,6 @@ Avant de terminer (end_turn), appelle save_note avec un Markdown structuré :
 - N'utilise PAS save_note : l'utilisateur n'a pas demandé de rapport fichier.
 - Réponds directement dans ta réponse (calcul, explication, etc.).`;
 
-  const saveNoteLine = requiresReport
-    ? "- save_note(content) — sauvegarde un rapport Markdown dans notes/rapport.md."
-    : "- save_note — non disponible pour cette mission (pas de rapport demandé).";
-
-  // Injection skill : expertise dynamique dans le system prompt uniquement
   const skillBlock = skill
     ? `
 ## Expertise active (skill : ${skill.skillName})
@@ -51,6 +41,8 @@ Applique strictement les consignes suivantes pour cette mission :
 ${skill.skillContent}
 `
     : "";
+
+  const toolsBlock = formatToolsForPrompt(requiresReport);
 
   return `Tu es un agent IA autonome en mode ReAct (Reason → Act → Observe).
 ${skillBlock}
@@ -61,9 +53,7 @@ ${skillBlock}
 ${reportBlock}
 
 ## Outils disponibles
-- fetch_url(url) — texte d'une page web (recherche).
-- run_js(code) — calculs / JS via Bun (console.log pour le résultat).
-${saveNoteLine}
+${toolsBlock}
 
 ## Règles
 - Réponds en français.

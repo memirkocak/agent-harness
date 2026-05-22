@@ -26,13 +26,19 @@ Détection auto selon la mission → chargement `skills/<name>/SKILL.md` → inj
 
 | Skill | Exemples de mission |
 |-------|---------------------|
-| `code-review` | audit, review, sécurité, analyse ce code |
+| `security-audit` | audit sécurité, injection sql/xss, owasp, failles |
+| `code-review` | review, PR, refactor, qualité code |
 | `tech-report` | rapport, architecture, compare, documentation |
 | `data-analysis` | analyse des données, API, trends, anomalies |
+
+**Guide agent sécurité** (schémas + utilisation) : [GuideSecurity.md](GuideSecurity.md).  
+Référence courte : [docs/AGENT-SECURITE.md](docs/AGENT-SECURITE.md).
 
 Voir `AGENTS.md` pour le détail.
 
 **Guide complet** (modifs récentes, tests, prompts, skills, schémas) : [docs/GUIDE.md](docs/GUIDE.md).
+
+**Rapport refactorisation** (priorités 1–3) : [RapportRefacto.md](RapportRefacto.md).
 
 ## Architecture
 

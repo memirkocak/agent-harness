@@ -6,6 +6,7 @@
  */
 import { readdir } from "node:fs/promises";
 import { join } from "node:path";
+import { SKILL_MIN_SCORE } from "../config.ts";
 
 const SKILLS_ROOT = join(import.meta.dir, "..", "skills");
 
@@ -52,7 +53,7 @@ async function loadCatalog(): Promise<SkillEntry[]> {
 }
 
 /** Parse --- yaml --- + corps Markdown (name + triggers uniquement). */
-function parseSkillMd(raw: string): {
+export function parseSkillMd(raw: string): {
   meta: { name?: string; triggers?: string[] };
   body: string;
 } {
@@ -111,7 +112,7 @@ export async function resolveSkillForMission(
     }
   }
 
-  if (!best || bestScore === 0) return null;
+  if (!best || bestScore < SKILL_MIN_SCORE) return null;
 
   return { skillName: best.name, skillContent: best.body };
 }
