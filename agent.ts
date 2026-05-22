@@ -7,19 +7,86 @@
 import { llm } from "./llm.ts";
 import {
   executeTool,
+  isReportToolSuccess,
   normalizeReportContent,
   previewResult,
   writeFullReport,
 } from "./tools.ts";
-import type { AgentOptions, LlmResponse, Message, StopReason } from "./types.ts";
+import type {
+  AgentOptions,
+  LlmResponse,
+  Message,
+  StopReason,
+  ToolCall,
+} from "./types.ts";
 
-/** true si un save_note a bien écrit dans notes/rapport.md pendant cette mission. */
+/** Outils exécutables en parallèle dans un même tour (fetch_url, run_js). */
+const PARALLEL_TOOLS = new Set(["fetch_url", "run_js"]);
+
+type ToolCallResult = { id: string; content: string };
+
+async function runOneToolCall(
+  call: ToolCall,
+  options: AgentOptions,
+): Promise<ToolCallResult> {
+  if (call.name === "save_note" && !options.requiresReport) {
+    return {
+      id: call.id,
+      content:
+        "ERREUR: save_note indisponible — cette mission ne demande pas de rapport fichier.",
+    };
+  }
+
+  const content = await executeTool(call.name, call.arguments);
+  console.log(`  [résultat ${call.name}] ${previewResult(content)}`);
+  return { id: call.id, content };
+}
+
+/**
+ * Phase 1 : fetch_url + run_js en parallèle.
+ * Phase 2 : save_note (et autres) après — aligné avec prompt.ts.
+ * Messages tool réinjectés dans l'ordre des tool_calls du modèle.
+ */
+async function executeToolCallsForTurn(
+  calls: ToolCall[],
+  options: AgentOptions,
+): Promise<ToolCallResult[]> {
+  const parallel = calls.filter((c) => PARALLEL_TOOLS.has(c.name));
+  const deferred = calls.filter((c) => !PARALLEL_TOOLS.has(c.name));
+
+  const byId = new Map<string, ToolCallResult>();
+
+  if (parallel.length > 1) {
+    console.log(
+      `  [harness] ${parallel.length} outils en parallèle: ${parallel.map((c) => c.name).join(", ")}`,
+    );
+  }
+
+  if (parallel.length) {
+    const results = await Promise.all(
+      parallel.map((c) => runOneToolCall(c, options)),
+    );
+    for (const r of results) byId.set(r.id, r);
+  }
+
+  for (const call of deferred) {
+    const r = await runOneToolCall(call, options);
+    byId.set(r.id, r);
+  }
+
+  return calls.map((c) => {
+    const r = byId.get(c.id);
+    if (!r) {
+      throw new Error(`résultat manquant pour tool_call ${c.id} (${c.name})`);
+    }
+    return r;
+  });
+}
+
+/** true si save_note / writeFullReport a écrit notes/rapport.md pendant cette mission. */
 function wasReportSaved(messages: Message[]): boolean {
   return messages.some(
-    (m) =>
-      m.role === "tool" &&
-      (m.content.includes("Rapport créé") ||
-        m.content.includes("Rapport mis à jour")),
+    (m) => m.role === "tool" && isReportToolSuccess(m.content),
   );
 }
 
@@ -93,13 +160,7 @@ async function ensureReportSaved(messages: Message[]): Promise<void> {
     messages.find((m) => m.role === "user")?.content ?? "Mission";
 
   const toolResults = messages
-    .filter(
-      (m) =>
-        m.role === "tool" &&
-        !m.content.includes("Rapport créé") &&
-        !m.content.includes("Rapport mis à jour") &&
-        !m.content.startsWith("Note déjà"),
-    )
+    .filter((m) => m.role === "tool" && !isReportToolSuccess(m.content))
     .map((m) => `- ${m.content}`)
     .join("\n");
 
@@ -202,31 +263,17 @@ export async function runAgent(
     }
 
     // ─── ACT + OBSERVE : exécution des outils ───────────────────────────
-    // Plusieurs tool_calls possibles dans le MÊME tour (ex. fetch_url + save_note)
     if (response.stop_reason === "tool_use" && response.tool_calls?.length) {
-      for (const call of response.tool_calls) {
-        if (call.name === "save_note" && !options.requiresReport) {
-          messages.push({
-            role: "tool",
-            tool_call_id: call.id,
-            content:
-              "ERREUR: save_note indisponible — cette mission ne demande pas de rapport fichier.",
-          });
-          continue;
-        }
+      const results = await executeToolCallsForTurn(
+        response.tool_calls,
+        options,
+      );
 
-        // Act : exécution réelle (web, JS, fichier)
-        const result = await executeTool(call.name, call.arguments);
-        console.log(
-          `  [résultat ${call.name}] ${previewResult(result)}`,
-        );
-
-        // Observe : le LLM verra ce résultat au prochain appel llm()
-        // tool_call_id lie ce message à la demande d'outil correspondante
+      for (const { id, content } of results) {
         messages.push({
           role: "tool",
-          tool_call_id: call.id,
-          content: result,
+          tool_call_id: id,
+          content,
         });
       }
       continue; // tour suivant → nouveau Reason avec historique enrichi

@@ -6,6 +6,7 @@
   "scripts": {
     "start": "bun run index.ts",
     "check": "bunx tsc --noEmit",
+    "test": "bun test",
     "test:skills": "bun -e \"import { resolveSkillForMission } from './src/skills.ts'; const t=async(m)=>console.log(m,'->',(await resolveSkillForMission(m))?.skillName??'null'); await t('Calcule'); await t('audit'); await t('rapport');\""
   },
   "devDependencies": {

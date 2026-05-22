@@ -32,6 +32,8 @@ Détection auto selon la mission → chargement `skills/<name>/SKILL.md` → inj
 
 Voir `AGENTS.md` pour le détail.
 
+**Guide complet** (modifs récentes, tests, prompts, skills, schémas) : [docs/GUIDE.md](docs/GUIDE.md).
+
 ## Architecture
 
 | Fichier | Rôle |

@@ -132,6 +132,19 @@ function normalizeForDedup(text: string): string {
   return text.replace(/\s+/g, " ").trim();
 }
 
+/** Préfixe des messages tool après écriture réussie de notes/rapport.md. */
+export const REPORT_WRITTEN_MARKER = "Rapport écrit";
+
+/** Préfixe si le contenu est identique au fichier (pas de réécriture). */
+export const REPORT_UNCHANGED_MARKER = "Rapport inchangé";
+
+export function isReportToolSuccess(content: string): boolean {
+  return (
+    content.includes(REPORT_WRITTEN_MARKER) ||
+    content.includes(REPORT_UNCHANGED_MARKER)
+  );
+}
+
 /** Nettoie la réponse assistant avant écriture fichier (fences, entités HTML). */
 export function normalizeReportContent(text: string): string {
   let t = text.trim();
@@ -148,57 +161,46 @@ export function normalizeReportContent(text: string): string {
     .replace(/&gt;/g, ">");
 }
 
-/** Remplace notes/rapport.md par un rapport unique (pas d'append). */
-export async function writeFullReport(content: string): Promise<string> {
-  if (!content.trim()) throw new Error("content requis");
-
-  await mkdir(NOTES_DIR, { recursive: true });
-  const normalized = normalizeReportContent(content);
-  await Bun.write(
-    NOTES_FILE,
-    `${defaultReportHeader()}\n${normalized}\n`,
-  );
-  return `Rapport final écrit : ${NOTES_FILE}`;
-}
-
 function defaultReportHeader(): string {
   return `# Rapport agent\n\n_Généré le ${new Date().toISOString()}_\n`;
 }
 
-// ─── Outil 3 : save_note ───────────────────────────────────────────────────
-// Usage typique : rapport final structuré (# Rapport, ## Mission, ## Synthèse).
-// Déclenché quand le modèle suit le system prompt (prompt.ts).
-// Écrit physiquement dans notes/rapport.md (pas dans le terminal).
-export async function save_note(content: string): Promise<string> {
+/**
+ * Écriture unique de notes/rapport.md : remplace tout le fichier (pas d'append).
+ * Utilisé par save_note, writeFullReport et finalizeReport.
+ */
+async function writeReportFile(content: string): Promise<string> {
   if (!content.trim()) throw new Error("content requis");
 
+  const normalized = normalizeReportContent(content);
+  const fullBody = `${defaultReportHeader()}\n${normalized}\n`;
+
   await mkdir(NOTES_DIR, { recursive: true });
-
-  const normalized = content.trim();
-  const fingerprint = normalizeForDedup(normalized);
-
   const file = Bun.file(NOTES_FILE);
-  const exists = await file.exists();
-  let existing = exists ? await file.text() : "";
-
-  // Évite d'empiler le même rapport si le modèle rappelle save_note
-  if (exists && normalizeForDedup(existing).includes(fingerprint)) {
-    return `Note déjà présente (doublon évité) dans ${NOTES_FILE}`;
+  if (await file.exists()) {
+    const existingNorm = normalizeForDedup(await file.text());
+    const newNorm = normalizeForDedup(fullBody);
+    const bodyNorm = normalizeForDedup(normalized);
+    if (
+      existingNorm === newNorm ||
+      (bodyNorm.length > 0 && existingNorm.includes(bodyNorm))
+    ) {
+      return `${REPORT_UNCHANGED_MARKER} : ${NOTES_FILE}`;
+    }
   }
 
-  const block = ["", "---", "", normalized, ""].join("\n");
+  await Bun.write(NOTES_FILE, fullBody);
+  return `${REPORT_WRITTEN_MARKER} : ${NOTES_FILE}`;
+}
 
-  if (!exists) {
-    await Bun.write(NOTES_FILE, defaultReportHeader() + block);
-    return `Rapport créé : ${NOTES_FILE}`;
-  }
+/** Sync harness : remplace notes/rapport.md (alias de writeReportFile). */
+export async function writeFullReport(content: string): Promise<string> {
+  return writeReportFile(content);
+}
 
-  if (!existing.startsWith("# ")) {
-    existing = defaultReportHeader() + "\n" + existing;
-  }
-
-  await Bun.write(NOTES_FILE, existing + block);
-  return `Rapport mis à jour : ${NOTES_FILE}`;
+// ─── Outil 3 : save_note ───────────────────────────────────────────────────
+export async function save_note(content: string): Promise<string> {
+  return writeReportFile(content);
 }
 
 type ToolHandler = (args: Record<string, unknown>) => Promise<string>;

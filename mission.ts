@@ -1,27 +1,39 @@
 /**
  * Détecte si la mission utilisateur demande un rapport dans notes/rapport.md.
- * Heuristique sur les mots-clés (pas de second appel LLM).
+ * Heuristique stricte (pas de second appel LLM).
  */
 export function missionRequiresReport(mission: string): boolean {
   const m = mission.toLowerCase();
 
-  const keywords = [
+  /** Signaux explicites — suffisent seuls. */
+  const primary = [
     "rapport",
-    "rédig",
-    "redig",
-    "sauvegard",
-    "structuré",
-    "structuree",
-    "structur",
-    "document",
-    "enregistr",
     "notes/rapport",
-    "fichier md",
-    ".md",
-    "écris dans",
-    "ecris dans",
     "save_note",
+    "fichier md",
+    "fichier markdown",
+    "rapport.md",
   ];
 
-  return keywords.some((k) => m.includes(k));
+  if (primary.some((k) => m.includes(k))) return true;
+
+  /** Signaux composés — évite les faux positifs (.md, document, structuré seuls). */
+  const needsRapportOrNotes = (extra: string[]) =>
+    extra.some((k) => m.includes(k)) &&
+    (m.includes("rapport") || m.includes("notes/rapport") || m.includes("notes"));
+
+  if ((m.includes("rédig") || m.includes("redig")) && m.includes("rapport")) {
+    return true;
+  }
+
+  if (needsRapportOrNotes(["sauvegard", "enregistr"])) return true;
+
+  if (
+    (m.includes("écris") || m.includes("ecris")) &&
+    (m.includes("rapport") || m.includes("notes/rapport"))
+  ) {
+    return true;
+  }
+
+  return false;
 }
