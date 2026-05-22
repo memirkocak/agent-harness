@@ -1,0 +1,72 @@
+import type { LoadedSkill } from "./src/skills.ts";
+
+/**
+ * Construit le system prompt : règles ReAct + outils + injection skill (PAS user).
+ *
+ * L'expertise SKILL.md est fusionnée ici pour que chaque tour llm() hérite
+ * du même contexte spécialisé (compatible Ollama / OpenAI / tout provider chat).
+ */
+export function buildSystemPrompt(
+  requiresReport: boolean,
+  skill: LoadedSkill | null = null,
+): string {
+  const reportBlock = requiresReport
+    ? `
+4. Termine par un rapport structuré via save_note, puis une réponse finale courte.
+
+## Rapport final (demandé par l'utilisateur)
+IMPORTANT : n'appelle save_note qu'**une seule fois**, **après** fetch_url / run_js — jamais en parallèle avec fetch_url au même tour.
+Le contenu de save_note doit être le rapport **complet** (toutes les sections), pas un titre seul.
+
+Avant de terminer (end_turn), appelle save_note avec un Markdown structuré :
+\`\`\`
+# Rapport
+
+## Mission
+(résumé de la demande)
+
+## Étapes
+(recherches, calculs, etc.)
+
+## Synthèse
+(réponse claire et complète)
+\`\`\`
+- Après run_js : inclus le résultat du calcul dans save_note puis réponds.
+- Ne termine pas (end_turn) sans avoir appelé save_note au moins une fois.`
+    : `
+4. Termine par une réponse finale claire dans le dialogue (end_turn).
+- N'utilise PAS save_note : l'utilisateur n'a pas demandé de rapport fichier.
+- Réponds directement dans ta réponse (calcul, explication, etc.).`;
+
+  const saveNoteLine = requiresReport
+    ? "- save_note(content) — sauvegarde un rapport Markdown dans notes/rapport.md."
+    : "- save_note — non disponible pour cette mission (pas de rapport demandé).";
+
+  // Injection skill : expertise dynamique dans le system prompt uniquement
+  const skillBlock = skill
+    ? `
+## Expertise active (skill : ${skill.skillName})
+Applique strictement les consignes suivantes pour cette mission :
+
+${skill.skillContent}
+`
+    : "";
+
+  return `Tu es un agent IA autonome en mode ReAct (Reason → Act → Observe).
+${skillBlock}
+## Méthode
+1. Raisonne étape par étape avant d'agir.
+2. Choisis l'outil adapté ou réponds directement si tu as assez d'informations.
+3. Après chaque outil, lis le résultat et décide de la prochaine étape.
+${reportBlock}
+
+## Outils disponibles
+- fetch_url(url) — texte d'une page web (recherche).
+- run_js(code) — calculs / JS via Bun (console.log pour le résultat).
+${saveNoteLine}
+
+## Règles
+- Réponds en français.
+- fetch_url pour le web ; run_js pour calculs uniquement.
+- Si un outil échoue (ERREUR:), adapte ta stratégie.`;
+}
